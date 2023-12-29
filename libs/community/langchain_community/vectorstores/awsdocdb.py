@@ -21,11 +21,8 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 
 from langchain_community.vectorstores.utils import maximal_marginal_relevance
+from pymongo.collection import Collection
 
-if TYPE_CHECKING:
-    from pymongo.collection import Collection
-
-MongoDBDocumentType = TypeVar("MongoDBDocumentType", bound=Dict[str, Any])
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +33,7 @@ class AWSDocDB(VectorStore):
 
     def __init__(
         self,
-        collection: Collection[MongoDBDocumentType],
+        collection: Collection,
         embedding: Embeddings,
         *,
         index_name: str = "default",
@@ -66,33 +63,6 @@ class AWSDocDB(VectorStore):
             raise NotImplementedError(
                 f"No relevance score function for ${self._relevance_score_fn}"
             )
-
-    @classmethod
-    def from_connection_string(
-        cls,
-        connection_string: str,
-        namespace: str,
-        embedding: Embeddings,
-        **kwargs: Any,
-    ) -> MongoDBAtlasVectorSearch:
-        try:
-            from importlib.metadata import version
-
-            from pymongo import MongoClient
-            from pymongo.driver_info import DriverInfo
-        except ImportError:
-            raise ImportError(
-                "Could not import pymongo, please install it with "
-                "`pip install pymongo`."
-            )
-        client: MongoClient = MongoClient(
-            connection_string,
-            driver=DriverInfo(name="Langchain", version=version("langchain")),
-        )
-        db_name, collection_name = namespace.split(".")
-        collection = client[db_name][collection_name]
-        return cls(collection, embedding, **kwargs)
-
     def add_texts(
         self,
         texts: Iterable[str],
@@ -129,11 +99,15 @@ class AWSDocDB(VectorStore):
         return insert_result.inserted_ids
 
     def _similarity_search_with_score(
-               self,
+        self,
         embedding: List[float],
         k: int = 4,
         score_method = "dotProduct"
     ) -> List[Tuple[Document, float]]:
+        pre_filter: Optional[Dict] = None,
+        post_filter_pipeline: Optional[List[Dict]] = None,
+    ) -> List[Tuple[Document, float]]:
+
         params = {
             "vector": embedding,
             "path": self._embedding_key,
@@ -229,18 +203,3 @@ class AWSDocDB(VectorStore):
         )
         mmr_docs = [docs[i][0] for i in mmr_doc_indexes]
         return mmr_docs
-
-    @classmethod
-    def from_texts(
-        cls,
-        texts: List[str],
-        embedding: Embeddings,
-        metadatas: Optional[List[Dict]] = None,
-        collection: Optional[Collection[MongoDBDocumentType]] = None,
-        **kwargs: Any,
-    ) -> MongoDBAtlasVectorSearch:
-        if collection is None:
-            raise ValueError("Must provide 'collection' named parameter.")
-        vectorstore = cls(collection, embedding, **kwargs)
-        vectorstore.add_texts(texts, metadatas=metadatas)
-        return vectorstore
