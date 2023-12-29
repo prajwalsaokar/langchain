@@ -102,8 +102,7 @@ class AWSDocDB(VectorStore):
         self,
         embedding: List[float],
         k: int = 4,
-        score_method = "dotProduct"
-    ) -> List[Tuple[Document, float]]:
+        score_method = "dotProduct",
         pre_filter: Optional[Dict] = None,
         post_filter_pipeline: Optional[List[Dict]] = None,
     ) -> List[Tuple[Document, float]]:
